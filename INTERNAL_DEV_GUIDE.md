@@ -136,5 +136,36 @@ bun run script/build.ts --single --skip-install
 **步骤 3: 压缩分发**
 将该文件夹压缩为 ZIP 发送给用户。
 
+## 6. 配置与数据存储 (Windows)
+
+在 Windows 平台上，OpenCode 使用类 Unix/XDG 风格的目录结构，而非标准的 `AppData\Roaming`。
+
+### 6.1 关键路径
+*   **配置文件 (`opencode.json`)**:
+    `C:\Users\<User>\.config\opencode\opencode.json`
+    *(注意：不是 AppData)*
+
+*   **认证信息 (`auth.json`)**:
+    `C:\Users\<User>\.local\share\opencode\auth.json`
+    *(存储 Connect 界面输入的 API Key 和 BaseURL)*
+
+*   **日志文件**:
+    `C:\Users\<User>\.local\share\opencode\log`
+
+### 6.2 快速定位命令
+如果需要在用户机器上确认实际使用的路径，可以运行以下命令：
+
+```powershell
+.\opencode.exe debug paths
+```
+
+输出示例：
+```
+home       C:\Users\User
+data       C:\Users\User\.local\share\opencode
+config     C:\Users\User\.config\opencode
+...
+```
+
 ---
-*文档生成日期: 2026-01-17*
+*文档生成日期: 2026-01-18*
