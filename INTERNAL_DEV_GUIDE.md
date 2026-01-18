@@ -79,5 +79,62 @@ Stop-Process -Name opencode -ErrorAction SilentlyContinue
 *   **上游同步**: 定期从 `anomalyco/opencode` 的 `main` 分支拉取更新。
 *   **冲突处理**: 重点关注 `provider.ts` 的冲突，因为这是我们修改最重的地方。
 
+## 5. 分发与交付指南
+
+本项目支持两种分发模式：**EXE 便携版**（适合无 Node 环境用户）和 **NPM 包**（适合开发者）。
+
+### 5.1 模式一：发布为 NPM 包 (推荐)
+
+这种方式最符合开发者的习惯，用户可以通过 `npm i -g @yunfan/opencode` 安装，且能自动处理 PATH 和工作目录问题。
+
+**步骤 1: 修改包信息**
+编辑 `packages/opencode/package.json`：
+```json
+{
+  "name": "@yunfan/opencode",
+  "version": "1.0.0",  // 每次发布前递增
+  "publishConfig": {
+    "registry": "https://your-internal-registry.com/" // 如果有内部私服
+  }
+}
+```
+
+**步骤 2: 构建产物**
+在 `packages/opencode` 目录下运行：
+```bash
+# 确保先安装依赖
+bun install
+# 执行构建 (注意：NPM 发布不需要构建成单一 exe，而是编译成 JS)
+bun run build
+```
+*(注意：如果是标准 NPM 发布，通常只需要编译 TypeScript 到 dist/index.js，这里的 build 脚本是为 exe 设计的。对于 NPM 发布，其实直接发布源码或简单的 tsc 编译产物即可。如果是发布官方那种 CLI，通常会包含 postinstall 脚本来下载二进制，或者直接发布纯 JS 版本。鉴于我们的修改，建议直接发布 `dist` 目录下的内容，或者参考下文的 EXE 打包。)*
+
+**简化版 NPM 发布流程 (纯 JS 模式)**:
+如果不希望依赖复杂的二进制下载逻辑，最简单的方法是保留当前的源码发布模式。确保 `bin` 字段指向正确的入口文件。
+
+```bash
+cd packages/opencode
+npm publish --access public
+```
+
+### 5.2 模式二：构建 EXE 便携版
+
+适合分发给所有用户，解压即用。
+
+**步骤 1: 构建二进制文件**
+```bash
+cd packages/opencode
+bun run script/build.ts --single --skip-install
+```
+
+**步骤 2: 准备交付包**
+创建一个文件夹（如 `OpenCode_Internal_v1.0`），放入以下文件：
+1.  `opencode.exe` (从 `dist/opencode-windows-x64/bin` 复制)
+2.  `opencode.json` (预配置文件，含 `internal` provider 设置)
+3.  `install_right_click_menu.bat` (右键菜单安装脚本)
+
+**步骤 3: 压缩分发**
+将该文件夹压缩为 ZIP 发送给用户。
+
 ---
 *文档生成日期: 2026-01-17*
