@@ -503,72 +503,74 @@ export namespace Provider {
       const providerConfig = config.provider?.["internal"]
       const auth = await Auth.get("internal")
 
-      // Priority: Config > Env > Auth > Default
       let baseURL = providerConfig?.options?.baseURL ?? Env.get("INTERNAL_API_BASE")
       let apiKey = providerConfig?.options?.apiKey ?? Env.get("INTERNAL_API_KEY")
+      let extraModelID = Env.get("INTERNAL_MODEL")
 
-      // Parse from Auth if not found in Config/Env
-      if (!baseURL || !apiKey) {
-        if (auth?.key) {
-          if (auth.key.includes("|")) {
-            const [url, key] = auth.key.split("|")
-            if (!baseURL) baseURL = url.trim()
-            if (!apiKey) apiKey = key.trim()
-          } else {
-            if (!apiKey) apiKey = auth.key
-          }
+      // Parse from Auth (Format: URL|Key|ModelID or URL|Key)
+      if (auth?.key && auth.key.includes("|")) {
+        const parts = auth.key.split("|")
+        if (parts.length >= 2) {
+          if (!baseURL) baseURL = parts[0].trim()
+          if (!apiKey) apiKey = parts[1].trim()
         }
+        if (parts.length >= 3 && !extraModelID) {
+          extraModelID = parts[2].trim()
+        }
+      } else if (auth?.key && !apiKey) {
+        apiKey = auth.key
       }
 
       const hasConfig = !!(baseURL || apiKey || auth)
       baseURL = baseURL ?? "https://api.deepseek.com/v1"
       apiKey = apiKey ?? "sk-internal"
 
-      const defaultModelID = Env.get("INTERNAL_MODEL") ?? "deepseek-chat"
       const models: Record<string, Model> = {}
 
-      // Try to fetch models from the API
+      const createModelDef = (id: string, name?: string): Model => ({
+        id,
+        name: name ?? id,
+        providerID: "internal",
+        status: "active",
+        api: { id, url: "", npm: "@ai-sdk/openai-compatible" },
+        capabilities: {
+          temperature: true, reasoning: false, attachment: false, toolcall: false,
+          input: { text: true, audio: false, image: false, video: false, pdf: false },
+          output: { text: true, audio: false, image: false, video: false, pdf: false },
+          interleaved: false,
+        },
+        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+        limit: { context: 128000, output: 4096 },
+        headers: {},
+        release_date: "2024-01-01",
+        options: {},
+        variants: {},
+      })
+
+      // 1. Add models from explicit config in opencode.json
+      if (providerConfig?.models) {
+        for (const [id, m] of Object.entries(providerConfig.models)) {
+          models[id] = createModelDef(id, m.name)
+        }
+      }
+
+      // 2. Add extra model from Env or Auth string
+      if (extraModelID) {
+        models[extraModelID] = createModelDef(extraModelID)
+      }
+
+      // 3. Try to fetch models from the API (Auto-discovery)
       if (hasConfig) {
         try {
-          // Normalize baseURL to remove trailing slash
           const fetchURL = baseURL.replace(/\/+$/, "")
           const response = await fetch(`${fetchURL}/models`, {
-            headers: {
-              Authorization: `Bearer ${apiKey}`,
-            },
+            headers: { Authorization: `Bearer ${apiKey}` },
           })
-
           if (response.ok) {
             const data = await response.json() as any
             if (data && Array.isArray(data.data)) {
               for (const item of data.data) {
-                const id = item.id
-                models[id] = {
-                  id: id,
-                  name: id,
-                  providerID: "internal",
-                  status: "active",
-                  api: {
-                    id: id,
-                    url: "", // will be overridden by options.baseURL
-                    npm: "@ai-sdk/openai-compatible",
-                  },
-                  capabilities: {
-                    temperature: true,
-                    reasoning: false,
-                    attachment: false,
-                    toolcall: false, // Assume false for discovered models unless we know better
-                    input: { text: true, audio: false, image: false, video: false, pdf: false },
-                    output: { text: true, audio: false, image: false, video: false, pdf: false },
-                    interleaved: false,
-                  },
-                  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                  limit: { context: 128000, output: 4096 },
-                  headers: {},
-                  release_date: "2024-01-01",
-                  options: {},
-                  variants: {},
-                }
+                if (!models[item.id]) models[item.id] = createModelDef(item.id)
               }
             }
           }
@@ -577,42 +579,15 @@ export namespace Provider {
         }
       }
 
-      // Fallback if no models found or fetch failed
+      // 4. Default fallback if absolutely no models registered
       if (Object.keys(models).length === 0) {
-        models[defaultModelID] = {
-          id: defaultModelID,
-          name: defaultModelID === "deepseek-chat" ? "DeepSeek Chat" : "Internal Model",
-          providerID: "internal",
-          status: "active",
-          api: {
-            id: defaultModelID,
-            url: "", 
-            npm: "@ai-sdk/openai-compatible",
-          },
-          capabilities: {
-            temperature: true,
-            reasoning: false,
-            attachment: false,
-            toolcall: false,
-            input: { text: true, audio: false, image: false, video: false, pdf: false },
-            output: { text: true, audio: false, image: false, video: false, pdf: false },
-            interleaved: false,
-          },
-          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-          limit: { context: 128000, output: 4096 },
-          headers: {},
-          release_date: "2024-01-01",
-          options: {},
-          variants: {},
-        }
+        const fallbackID = "deepseek-chat"
+        models[fallbackID] = createModelDef(fallbackID, "DeepSeek Chat (Default)")
       }
 
       return {
         autoload: hasConfig, 
-        options: {
-          baseURL,
-          apiKey,
-        },
+        options: { baseURL, apiKey },
         getModel: async (sdk: any, modelID: string, _options?: Record<string, any>) => {
           return sdk(modelID)
         },

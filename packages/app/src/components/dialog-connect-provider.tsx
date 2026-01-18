@@ -248,13 +248,13 @@ export function DialogConnectProvider(props: { provider: string }) {
                             Enter your Internal Model API credentials.
                           </div>
                           <div class="text-14-regular text-text-base">
-                            To configure both Base URL and API Key, use the format: <span class="font-mono bg-surface-hover p-0.5 rounded">BaseURL|ApiKey</span>
+                            Format: <span class="font-mono bg-surface-hover p-0.5 rounded">BaseURL|ApiKey|[ModelID]</span>
                           </div>
                           <div class="text-14-regular text-text-muted">
-                            Example: http://192.168.1.10:8080/v1|sk-my-key
+                            Example: http://192.168.1.10:8080/v1|sk-key|qwen-72b
                           </div>
                           <div class="text-14-regular text-text-base">
-                            If you only enter an API Key, the default URL (http://localhost:11434/v1) will be used.
+                            If ModelID is omitted, we will try to auto-discover models or fallback to DeepSeek.
                           </div>
                         </div>
                       </Match>
