@@ -91,6 +91,8 @@ export namespace Config {
 
     const directories = [
       Global.Path.config,
+      // Add executable directory for portable config
+      path.dirname(process.execPath),
       ...(await Array.fromAsync(
         Filesystem.up({
           targets: [".opencode"],
@@ -884,6 +886,7 @@ export namespace Config {
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()
+        .default("disabled")
         .describe(
           "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
         ),
