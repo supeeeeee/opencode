@@ -57,6 +57,8 @@ export namespace Agent {
       question: "deny",
       plan_enter: "deny",
       plan_exit: "deny",
+      webfetch: "deny",
+      websearch: "deny",
       // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
       read: {
         "*": "allow",
@@ -129,8 +131,6 @@ export namespace Agent {
             glob: "allow",
             list: "allow",
             bash: "allow",
-            webfetch: "allow",
-            websearch: "allow",
             codesearch: "allow",
             read: "allow",
             external_directory: {
