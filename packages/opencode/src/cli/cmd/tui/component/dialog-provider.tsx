@@ -1,4 +1,5 @@
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createSignal, onMount, Show, Switch, Match } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useSync } from "@tui/context/sync"
 import { map, pipe, sortBy } from "remeda"
 import { DialogSelect } from "@tui/ui/dialog-select"
@@ -20,6 +21,7 @@ const PROVIDER_PRIORITY: Record<string, number> = {
   "github-copilot": 2,
   openai: 3,
   google: 4,
+  internal: 5,
 }
 
 export function createDialogProviderOptions() {
@@ -41,7 +43,6 @@ export function createDialogProviderOptions() {
             anthropic: "(Claude Max or API key)",
             openai: "(ChatGPT Plus/Pro or API key)",
           }[provider.id],
-          category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Other",
           footer: isConnected ? "Connected" : undefined,
           async onSelect() {
             const methods = sync.data.provider_auth[provider.id] ?? [
@@ -97,6 +98,9 @@ export function createDialogProviderOptions() {
               }
             }
             if (method.type === "api") {
+              if (provider.id === "internal") {
+                return dialog.replace(() => <InternalApiMethod />)
+              }
               return dialog.replace(() => <ApiMethod providerID={provider.id} title={method.label} />)
             }
           },
@@ -109,7 +113,7 @@ export function createDialogProviderOptions() {
 
 export function DialogProvider() {
   const options = createDialogProviderOptions()
-  return <DialogSelect title="Connect a provider" options={options()} />
+  return <DialogSelect title="Connect a provider" options={options()} skipFilter hideSearch />
 }
 
 interface AutoMethodProps {
@@ -250,6 +254,60 @@ function ApiMethod(props: ApiMethodProps) {
         await sdk.client.instance.dispose()
         await sync.bootstrap()
         dialog.replace(() => <DialogModel providerID={props.providerID} />)
+      }}
+    />
+  )
+}
+
+function InternalApiMethod() {
+  const dialog = useDialog()
+
+  return (
+    <DialogPrompt
+      title="Internal Provider - Step 1/3"
+      placeholder="Base URL (e.g. http://localhost:11434/v1)"
+      onConfirm={(val) => {
+        if (!val?.trim()) return
+        dialog.replace(() => <InternalStep2 baseUrl={val.trim()} />)
+      }}
+    />
+  )
+}
+
+function InternalStep2(props: { baseUrl: string }) {
+  const dialog = useDialog()
+
+  return (
+    <DialogPrompt
+      title="Internal Provider - Step 2/3"
+      placeholder="API Key (Optional, press Enter to skip)"
+      onConfirm={(val) => {
+        dialog.replace(() => <InternalStep3 baseUrl={props.baseUrl} apiKey={val?.trim() || "sk-dummy"} />)
+      }}
+    />
+  )
+}
+
+function InternalStep3(props: { baseUrl: string; apiKey: string }) {
+  const dialog = useDialog()
+  const sdk = useSDK()
+  const sync = useSync()
+
+  return (
+    <DialogPrompt
+      title="Internal Provider - Step 3/3"
+      placeholder="Model ID (Optional, press Enter to skip)"
+      onConfirm={async (val) => {
+        const modelId = val?.trim() || ""
+        const key = `${props.baseUrl}|${props.apiKey}|${modelId}`
+
+        await sdk.client.auth.set({
+          providerID: "internal",
+          auth: { type: "api", key },
+        })
+        await sdk.client.instance.dispose()
+        await sync.bootstrap()
+        dialog.replace(() => <DialogModel providerID="internal" />)
       }}
     />
   )

@@ -1038,10 +1038,14 @@ export namespace Provider {
       const result = await fn(data)
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
-        mergeProvider(providerID, {
+        const patch: Partial<Info> = {
           source: "custom",
           options: result.options,
-        })
+        }
+        if (result.models) {
+          patch.models = result.models
+        }
+        mergeProvider(providerID, patch)
       }
     }
 

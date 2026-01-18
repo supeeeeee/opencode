@@ -20,6 +20,7 @@ export interface DialogSelectProps<T> {
   onFilter?: (query: string) => void
   onSelect?: (option: DialogSelectOption<T>) => void
   skipFilter?: boolean
+  hideSearch?: boolean
   keybind?: {
     keybind?: Keybind.Info
     title: string
@@ -207,24 +208,26 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           </text>
           <text fg={theme.textMuted}>esc</text>
         </box>
-        <box paddingTop={1} paddingBottom={1}>
-          <input
-            onInput={(e) => {
-              batch(() => {
-                setStore("filter", e)
-                props.onFilter?.(e)
-              })
-            }}
-            focusedBackgroundColor={theme.backgroundPanel}
-            cursorColor={theme.primary}
-            focusedTextColor={theme.textMuted}
-            ref={(r) => {
-              input = r
-              setTimeout(() => input.focus(), 1)
-            }}
-            placeholder={props.placeholder ?? "Search"}
-          />
-        </box>
+        <Show when={!props.hideSearch}>
+          <box paddingTop={1} paddingBottom={1}>
+            <input
+              onInput={(e) => {
+                batch(() => {
+                  setStore("filter", e)
+                  props.onFilter?.(e)
+                })
+              }}
+              focusedBackgroundColor={theme.backgroundPanel}
+              cursorColor={theme.primary}
+              focusedTextColor={theme.textMuted}
+              ref={(r) => {
+                input = r
+                setTimeout(() => input.focus(), 1)
+              }}
+              placeholder={props.placeholder ?? "Search"}
+            />
+          </box>
+        </Show>
       </box>
       <Show
         when={grouped().length > 0}

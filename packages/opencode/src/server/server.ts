@@ -443,6 +443,7 @@ export namespace Server {
             const providerID = c.req.valid("param").providerID
             const info = c.req.valid("json")
             await Auth.set(providerID, info)
+            await Instance.dispose()
             return c.json(true)
           },
         )

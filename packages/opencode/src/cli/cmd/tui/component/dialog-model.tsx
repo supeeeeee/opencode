@@ -206,6 +206,7 @@ export function DialogModel(props: { providerID?: string }) {
 
   return (
     <DialogSelect
+      hideSearch={props.providerID === "internal"}
       keybind={[
         {
           keybind: keybind.all.model_provider_list?.[0],

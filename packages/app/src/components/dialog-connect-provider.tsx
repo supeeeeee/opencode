@@ -11,7 +11,7 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
 import { iife } from "@opencode-ai/util/iife"
-import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
+import { createMemo, Match, onCleanup, onMount, Show, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -195,6 +195,8 @@ export function DialogConnectProvider(props: { provider: string }) {
               {iife(() => {
                 const [formStore, setFormStore] = createStore({
                   value: "",
+                  baseUrl: "",
+                  modelId: "",
                   error: undefined as string | undefined,
                 })
 
@@ -203,6 +205,31 @@ export function DialogConnectProvider(props: { provider: string }) {
 
                   const form = e.currentTarget as HTMLFormElement
                   const formData = new FormData(form)
+
+                  if (props.provider === "internal") {
+                    const baseUrl = formData.get("baseUrl") as string
+                    const apiKey = formData.get("apiKey") as string
+                    const modelId = formData.get("modelId") as string
+
+                    if (!baseUrl?.trim()) {
+                      setFormStore("error", "Base URL is required")
+                      return
+                    }
+
+                    const key = `${baseUrl.trim()}|${apiKey?.trim() || "sk-dummy"}|${modelId?.trim() ?? ""}`
+
+                    setFormStore("error", undefined)
+                    await globalSDK.client.auth.set({
+                      providerID: props.provider,
+                      auth: {
+                        type: "api",
+                        key,
+                      },
+                    })
+                    await complete()
+                    return
+                  }
+
                   const apiKey = formData.get("apiKey") as string
 
                   if (!apiKey?.trim()) {
@@ -247,14 +274,8 @@ export function DialogConnectProvider(props: { provider: string }) {
                           <div class="text-14-regular text-text-base">
                             Enter your Internal Model API credentials.
                           </div>
-                          <div class="text-14-regular text-text-base">
-                            Format: <span class="font-mono bg-surface-hover p-0.5 rounded">BaseURL|ApiKey|[ModelID]</span>
-                          </div>
                           <div class="text-14-regular text-text-muted">
-                            Example: http://192.168.1.10:8080/v1|sk-key|qwen-72b
-                          </div>
-                          <div class="text-14-regular text-text-base">
-                            If ModelID is omitted, we will try to auto-discover models or fallback to DeepSeek.
+                            We support any OpenAI-compatible API (e.g. vLLM, Ollama, LM Studio).
                           </div>
                         </div>
                       </Match>
@@ -266,17 +287,56 @@ export function DialogConnectProvider(props: { provider: string }) {
                       </Match>
                     </Switch>
                     <form onSubmit={handleSubmit} class="flex flex-col items-start gap-4">
-                      <TextField
-                        autofocus
-                        type="text"
-                        label={`${provider().name} API key`}
-                        placeholder="API key"
-                        name="apiKey"
-                        value={formStore.value}
-                        onChange={setFormStore.bind(null, "value")}
-                        validationState={formStore.error ? "invalid" : undefined}
-                        error={formStore.error}
-                      />
+                      <Switch>
+                        <Match when={provider().id === "internal"}>
+                          <div class="w-full flex flex-col gap-4">
+                            <TextField
+                              autofocus
+                              type="text"
+                              label="Base URL"
+                              placeholder="http://localhost:11434/v1"
+                              name="baseUrl"
+                              value={formStore.baseUrl}
+                              onChange={setFormStore.bind(null, "baseUrl")}
+                              validationState={formStore.error ? "invalid" : undefined}
+                            />
+                            <TextField
+                              type="password"
+                              label="API Key (Optional)"
+                              placeholder="sk-..."
+                              name="apiKey"
+                              value={formStore.value}
+                              onChange={setFormStore.bind(null, "value")}
+                            />
+                            <TextField
+                              type="text"
+                              label="Model ID (Optional)"
+                              placeholder="llama3"
+                              name="modelId"
+                              value={formStore.modelId}
+                              onChange={setFormStore.bind(null, "modelId")}
+                            />
+                          </div>
+                        </Match>
+                        <Match when={true}>
+                          <TextField
+                            autofocus
+                            type="text"
+                            label={`${provider().name} API key`}
+                            placeholder="API key"
+                            name="apiKey"
+                            value={formStore.value}
+                            onChange={setFormStore.bind(null, "value")}
+                            validationState={formStore.error ? "invalid" : undefined}
+                            error={formStore.error}
+                          />
+                        </Match>
+                      </Switch>
+
+                      <Show when={formStore.error}>
+                        <div class="text-14-regular text-icon-critical-base">{formStore.error}</div>
+                      </Show>
+
                       <Button class="w-auto" type="submit" size="large" variant="primary">
                         Submit
                       </Button>
