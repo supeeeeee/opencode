@@ -498,6 +498,127 @@ export namespace Provider {
         },
       }
     },
+    internal: async () => {
+      const config = await Config.get()
+      const providerConfig = config.provider?.["internal"]
+      const auth = await Auth.get("internal")
+
+      // Priority: Config > Env > Auth > Default
+      let baseURL = providerConfig?.options?.baseURL ?? Env.get("INTERNAL_API_BASE")
+      let apiKey = providerConfig?.options?.apiKey ?? Env.get("INTERNAL_API_KEY")
+
+      // Parse from Auth if not found in Config/Env
+      if (!baseURL || !apiKey) {
+        if (auth?.key) {
+          if (auth.key.includes("|")) {
+            const [url, key] = auth.key.split("|")
+            if (!baseURL) baseURL = url.trim()
+            if (!apiKey) apiKey = key.trim()
+          } else {
+            if (!apiKey) apiKey = auth.key
+          }
+        }
+      }
+
+      const hasConfig = !!(baseURL || apiKey || auth)
+      baseURL = baseURL ?? "https://api.deepseek.com/v1"
+      apiKey = apiKey ?? "sk-internal"
+
+      const defaultModelID = Env.get("INTERNAL_MODEL") ?? "deepseek-chat"
+      const models: Record<string, Model> = {}
+
+      // Try to fetch models from the API
+      if (hasConfig) {
+        try {
+          // Normalize baseURL to remove trailing slash
+          const fetchURL = baseURL.replace(/\/+$/, "")
+          const response = await fetch(`${fetchURL}/models`, {
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+            },
+          })
+
+          if (response.ok) {
+            const data = await response.json() as any
+            if (data && Array.isArray(data.data)) {
+              for (const item of data.data) {
+                const id = item.id
+                models[id] = {
+                  id: id,
+                  name: id,
+                  providerID: "internal",
+                  status: "active",
+                  api: {
+                    id: id,
+                    url: "", // will be overridden by options.baseURL
+                    npm: "@ai-sdk/openai-compatible",
+                  },
+                  capabilities: {
+                    temperature: true,
+                    reasoning: false,
+                    attachment: false,
+                    toolcall: false, // Assume false for discovered models unless we know better
+                    input: { text: true, audio: false, image: false, video: false, pdf: false },
+                    output: { text: true, audio: false, image: false, video: false, pdf: false },
+                    interleaved: false,
+                  },
+                  cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                  limit: { context: 128000, output: 4096 },
+                  headers: {},
+                  release_date: "2024-01-01",
+                  options: {},
+                  variants: {},
+                }
+              }
+            }
+          }
+        } catch (e) {
+          log.warn("failed to fetch internal models", { error: e })
+        }
+      }
+
+      // Fallback if no models found or fetch failed
+      if (Object.keys(models).length === 0) {
+        models[defaultModelID] = {
+          id: defaultModelID,
+          name: defaultModelID === "deepseek-chat" ? "DeepSeek Chat" : "Internal Model",
+          providerID: "internal",
+          status: "active",
+          api: {
+            id: defaultModelID,
+            url: "", 
+            npm: "@ai-sdk/openai-compatible",
+          },
+          capabilities: {
+            temperature: true,
+            reasoning: false,
+            attachment: false,
+            toolcall: false,
+            input: { text: true, audio: false, image: false, video: false, pdf: false },
+            output: { text: true, audio: false, image: false, video: false, pdf: false },
+            interleaved: false,
+          },
+          cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+          limit: { context: 128000, output: 4096 },
+          headers: {},
+          release_date: "2024-01-01",
+          options: {},
+          variants: {},
+        }
+      }
+
+      return {
+        autoload: hasConfig, 
+        options: {
+          baseURL,
+          apiKey,
+        },
+        getModel: async (sdk: any, modelID: string, _options?: Record<string, any>) => {
+          return sdk(modelID)
+        },
+        models,
+      }
+    },
   }
 
   export const Model = z
@@ -669,6 +790,68 @@ export namespace Provider {
     const config = await Config.get()
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
+
+    // Inject internal provider if not present
+    if (!database["internal"]) {
+      const modelID = Env.get("INTERNAL_MODEL") ?? "deepseek-chat"
+      database["internal"] = {
+        id: "internal",
+        name: "Internal Server",
+        source: "custom",
+        env: ["INTERNAL_API_KEY"],
+        options: {},
+        models: {
+          [modelID]: {
+            id: modelID,
+            name: modelID === "deepseek-chat" ? "DeepSeek Chat" : "Internal Model",
+            providerID: "internal",
+            status: "active",
+            api: {
+              id: modelID,
+              url: "", // will be overridden by options.baseURL
+              npm: "@ai-sdk/openai-compatible",
+            },
+            capabilities: {
+              temperature: true,
+              reasoning: false,
+              attachment: false,
+              toolcall: false,
+              input: {
+                text: true,
+                audio: false,
+                image: false,
+                video: false,
+                pdf: false,
+              },
+              output: {
+                text: true,
+                audio: false,
+                image: false,
+                video: false,
+                pdf: false,
+              },
+              interleaved: false,
+            },
+            cost: {
+              input: 0,
+              output: 0,
+              cache: {
+                read: 0,
+                write: 0,
+              },
+            },
+            limit: {
+              context: 128000,
+              output: 4096,
+            },
+            headers: {},
+            release_date: "2024-01-01",
+            options: {},
+            variants: {},
+          },
+        },
+      }
+    }
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
@@ -943,6 +1126,13 @@ export namespace Provider {
       }
 
       log.info("found", { providerID })
+    }
+
+    // Force internal provider only
+    for (const providerID of Object.keys(providers)) {
+      if (providerID !== "internal") {
+        delete providers[providerID]
+      }
     }
 
     return {

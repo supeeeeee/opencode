@@ -35,27 +35,77 @@ export const ProviderRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const config = await Config.get()
-        const disabled = new Set(config.disabled_providers ?? [])
-        const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
-
-        const allProviders = await ModelsDev.get()
-        const filteredProviders: Record<string, (typeof allProviders)[string]> = {}
-        for (const [key, value] of Object.entries(allProviders)) {
-          if ((enabled ? enabled.has(key) : true) && !disabled.has(key)) {
-            filteredProviders[key] = value
+        const connected = await Provider.list()
+        
+        // Define the default internal provider info for the "Available" list
+        // This ensures it appears in /connect even if not yet configured/autoloaded
+        const modelID = process.env["INTERNAL_MODEL"] ?? "deepseek-chat"
+        const internalDefault: typeof connected["internal"] = {
+          id: "internal",
+          name: "Internal Server",
+          source: "custom",
+          env: ["INTERNAL_API_KEY"],
+          options: {},
+          models: {
+            [modelID]: {
+              id: modelID,
+              name: modelID === "deepseek-chat" ? "DeepSeek Chat" : "Internal Model",
+              providerID: "internal",
+              api: {
+                id: modelID,
+                url: "",
+                npm: "@ai-sdk/openai-compatible",
+              },
+              status: "active",
+              capabilities: {
+                temperature: true,
+                reasoning: false,
+                attachment: false,
+                toolcall: false,
+                input: {
+                  text: true,
+                  audio: false,
+                  image: false,
+                  video: false,
+                  pdf: false,
+                },
+                output: {
+                  text: true,
+                  audio: false,
+                  image: false,
+                  video: false,
+                  pdf: false,
+                },
+                interleaved: false,
+              },
+              cost: {
+                input: 0,
+                output: 0,
+                cache: { read: 0, write: 0 },
+              },
+              limit: {
+                context: 128000,
+                output: 4096,
+              },
+              headers: {},
+              release_date: "2024-01-01",
+              options: {},
+              variants: {},
+            }
           }
         }
 
-        const connected = await Provider.list()
-        const providers = Object.assign(
-          mapValues(filteredProviders, (x) => Provider.fromModelsDevProvider(x)),
-          connected,
-        )
+        // Strictly only allow 'internal'
+        // If it's in 'connected', use that (contains actual config/state)
+        // Otherwise use the default definition so it shows up in the list
+        const providers = {
+          internal: connected.internal ?? internalDefault
+        }
+
         return c.json({
           all: Object.values(providers),
           default: mapValues(providers, (item) => Provider.sort(Object.values(item.models))[0].id),
-          connected: Object.keys(connected),
+          connected: Object.keys(connected).filter(k => k === "internal"),
         })
       },
     )
